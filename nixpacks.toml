@@ -1,4 +1,3 @@
 [phases.setup]
-aptPkgs = ["libgl1", "libglib2.0-0"]
-
+aptPkgs = ["libgl1-mesa-glx", "libglib2.0-0"]
 
