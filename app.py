@@ -103,7 +103,7 @@ def analyze():
 
         start         = int(total_frames * 0.15)
         end           = int(total_frames * 0.85)
-        frame_indices = [int(start + i * (end - start) / 21) for i in range(21)]
+        frame_indices = [int(start + i * (end - start) / 31) for i in range(31)]
 
         all_frame_data = []
         failed_frames  = 0
