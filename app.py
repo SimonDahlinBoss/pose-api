@@ -92,28 +92,26 @@ def analyze_frame(landmarks):
 
     spine_conf = round((L[11].visibility + L[12].visibility + L[23].visibility + L[24].visibility) / 4, 3)
 
-    # Store confidence separately for averaging — not returned per frame
-    analyze_frame._last_conf = {
-        "shoulder_abduct": shoulder_conf,
-        "elbow":           elbow_conf,
-        "wrist":           wrist_conf,
-        "hip":             hip_conf,
-        "knee":            knee_conf,
-        "ankle":           ankle_conf,
-        "spine_lean":      spine_conf,
-    }
-
     return {
-        "shoulder_abduct": shoulder_abduct,
-        "shoulder_side":   shoulder_side,
-        "elbow":           elbow_angle,
-        "wrist":           wrist_angle,
-        "hip":             hip_angle,
-        "knee":            knee_angle,
-        "knee_side":       knee_side,
-        "ankle":           ankle_angle,
-        "spine_lean":      spine_angle(L),
-        "trunk_rotation":  trunk_rotation(L),
+        "shoulder_abduct":  shoulder_abduct,
+        "shoulder_side":    shoulder_side,
+        "elbow":            elbow_angle,
+        "wrist":            wrist_angle,
+        "hip":              hip_angle,
+        "knee":             knee_angle,
+        "knee_side":        knee_side,
+        "ankle":            ankle_angle,
+        "spine_lean":       spine_angle(L),
+        "trunk_rotation":   trunk_rotation(L),
+        "confidence": {
+            "shoulder_abduct": shoulder_conf,
+            "elbow":           elbow_conf,
+            "wrist":           wrist_conf,
+            "hip":             hip_conf,
+            "knee":            knee_conf,
+            "ankle":           ankle_conf,
+            "spine_lean":      spine_conf,
+        }
     }
 
 @app.route("/analyze", methods=["POST"])
@@ -144,7 +142,6 @@ def analyze():
         frame_indices = [int(start + i * (end - start) / 31) for i in range(31)]
 
         all_frame_data = []
-        all_conf_data  = []
         failed_frames  = 0
 
         with mp_pose.Pose(
@@ -166,7 +163,6 @@ def analyze():
                     all_frame_data.append(
                         analyze_frame(result.pose_landmarks.landmark)
                     )
-                    all_conf_data.append(analyze_frame._last_conf)
                 else:
                     failed_frames += 1
 
@@ -182,7 +178,7 @@ def analyze():
         conf_keys = ["shoulder_abduct", "elbow", "wrist", "hip", "knee", "ankle", "spine_lean"]
         avg_confidence = {}
         for key in conf_keys:
-            values = [c[key] for c in all_conf_data]
+            values = [f["confidence"][key] for f in all_frame_data]
             avg_confidence[key] = round(sum(values) / len(values), 3)
 
         return jsonify({
