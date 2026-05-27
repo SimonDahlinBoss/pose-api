@@ -50,32 +50,68 @@ def get_primary_side(landmarks):
     right_vis = landmarks[12].visibility
     return "left" if left_vis > right_vis else "right"
 
+def get_primary_knee_side(landmarks):
+    left_vis  = landmarks[25].visibility
+    right_vis = landmarks[26].visibility
+    return "left" if left_vis > right_vis else "right"
+
 def analyze_frame(landmarks):
     L = landmarks
-    side = get_primary_side(L)
+    shoulder_side = get_primary_side(L)
+    knee_side     = get_primary_knee_side(L)
 
-    if side == "left":
+    if shoulder_side == "left":
         shoulder_abduct = shoulder_abduction(L, "left")
         elbow_angle     = angle(lm(L,11), lm(L,13), lm(L,15))
         wrist_angle     = angle(lm(L,13), lm(L,15), lm(L,17))
+        shoulder_conf   = round(L[11].visibility, 3)
+        elbow_conf      = round(L[13].visibility, 3)
+        wrist_conf      = round(L[15].visibility, 3)
     else:
         shoulder_abduct = shoulder_abduction(L, "right")
         elbow_angle     = angle(lm(L,12), lm(L,14), lm(L,16))
         wrist_angle     = angle(lm(L,14), lm(L,16), lm(L,18))
+        shoulder_conf   = round(L[12].visibility, 3)
+        elbow_conf      = round(L[14].visibility, 3)
+        wrist_conf      = round(L[16].visibility, 3)
+
+    if knee_side == "left":
+        knee_angle  = angle(lm(L,23), lm(L,25), lm(L,27))
+        ankle_angle = angle(lm(L,25), lm(L,27), lm(L,31))
+        hip_angle   = angle(lm(L,11), lm(L,23), lm(L,25))
+        knee_conf   = round(L[25].visibility, 3)
+        ankle_conf  = round(L[27].visibility, 3)
+        hip_conf    = round(L[23].visibility, 3)
+    else:
+        knee_angle  = angle(lm(L,24), lm(L,26), lm(L,28))
+        ankle_angle = angle(lm(L,26), lm(L,28), lm(L,32))
+        hip_angle   = angle(lm(L,12), lm(L,24), lm(L,26))
+        knee_conf   = round(L[26].visibility, 3)
+        ankle_conf  = round(L[28].visibility, 3)
+        hip_conf    = round(L[24].visibility, 3)
+
+    spine_conf = round((L[11].visibility + L[12].visibility + L[23].visibility + L[24].visibility) / 4, 3)
 
     return {
         "shoulder_abduct":  shoulder_abduct,
-        "shoulder_side":    side,
+        "shoulder_side":    shoulder_side,
         "elbow":            elbow_angle,
         "wrist":            wrist_angle,
-        "hip_left":         angle(lm(L,11), lm(L,23), lm(L,25)),
-        "hip_right":        angle(lm(L,12), lm(L,24), lm(L,26)),
-        "knee_left":        angle(lm(L,23), lm(L,25), lm(L,27)),
-        "knee_right":       angle(lm(L,24), lm(L,26), lm(L,28)),
-        "ankle_left":       angle(lm(L,25), lm(L,27), lm(L,31)),
-        "ankle_right":      angle(lm(L,26), lm(L,28), lm(L,32)),
+        "hip":              hip_angle,
+        "knee":             knee_angle,
+        "knee_side":        knee_side,
+        "ankle":            ankle_angle,
         "spine_lean":       spine_angle(L),
         "trunk_rotation":   trunk_rotation(L),
+        "confidence": {
+            "shoulder_abduct": shoulder_conf,
+            "elbow":           elbow_conf,
+            "wrist":           wrist_conf,
+            "hip":             hip_conf,
+            "knee":            knee_conf,
+            "ankle":           ankle_conf,
+            "spine_lean":      spine_conf,
+        }
     }
 
 @app.route("/analyze", methods=["POST"])
@@ -139,10 +175,17 @@ def analyze():
                 "tip":           "Check camera angle — person should be fully visible",
             }), 422
 
+        conf_keys = ["shoulder_abduct", "elbow", "wrist", "hip", "knee", "ankle", "spine_lean"]
+        avg_confidence = {}
+        for key in conf_keys:
+            values = [f["confidence"][key] for f in all_frame_data]
+            avg_confidence[key] = round(sum(values) / len(values), 3)
+
         return jsonify({
             "frames_analyzed":        len(all_frame_data),
             "frames_failed":          failed_frames,
             "joint_angles_per_frame": all_frame_data,
+            "average_confidence":     avg_confidence,
         })
 
     finally:
