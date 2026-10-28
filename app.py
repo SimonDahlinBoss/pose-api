@@ -4,6 +4,8 @@ import numpy as np
 import requests
 import tempfile
 import os
+import subprocess
+import json
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -113,7 +115,23 @@ def analyze_frame(landmarks):
             "spine_lean":      spine_conf,
         }
     }
+MAX_W, MAX_H, MAX_FPS = 1080, 1920, 30
 
+def normalize_video(src, dst):
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=r_frame_rate", "-of", "json", src],
+        capture_output=True, text=True, check=True, timeout=30)
+    num, den = json.loads(probe.stdout)["streams"][0]["r_frame_rate"].split("/")
+    fps = float(num) / float(den) if float(den) else 0
+
+    cmd = ["ffmpeg", "-y", "-i", src, "-vf",
+           f"scale='min({MAX_W},iw)':'min({MAX_H},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2"]
+    if fps > MAX_FPS + 0.5:
+        cmd += ["-r", str(MAX_FPS)]
+    cmd += ["-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-g", "15", "-pix_fmt", "yuv420p", dst]
+    subprocess.run(cmd, check=True, capture_output=True, timeout=120)
 @app.route("/analyze", methods=["POST"])
 def analyze():
     data      = request.json or {}
@@ -131,8 +149,17 @@ def analyze():
         tmp.write(r.content)
         tmp_path = tmp.name
 
+    norm_path = tmp_path + "_norm.mp4"
+
     try:
-        cap          = cv2.VideoCapture(tmp_path)
+        try:
+            normalize_video(tmp_path, norm_path)
+            video_path = norm_path
+        except Exception as e:
+            print(f"normalize failed, using original: {e}", flush=True)
+            video_path = tmp_path
+
+        cap          = cv2.VideoCapture(video_path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         if total_frames < 1:
             return jsonify({"error": "Could not read video frames"}), 422
@@ -189,7 +216,9 @@ def analyze():
         })
 
     finally:
-        os.unlink(tmp_path)
+        for p in (tmp_path, norm_path):
+            if os.path.exists(p):
+                os.unlink(p)
 
 @app.route("/health", methods=["GET"])
 def health():
