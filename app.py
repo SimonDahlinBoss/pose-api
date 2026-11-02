@@ -224,6 +224,12 @@ def analyze():
 def health():
     return jsonify({"status": "ok"})
 
+@app.route("/versions", methods=["GET"])
+def versions():
+    from importlib.metadata import distributions
+    lines = sorted(f"{d.metadata['Name']}=={d.version}" for d in distributions())
+    return "\n".join(lines), 200, {"Content-Type": "text/plain"}
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
